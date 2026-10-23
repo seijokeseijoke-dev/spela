@@ -1,0 +1,50 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'se.spela.app'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'se.spela.app'
+        minSdk 24
+        targetSdk 35
+        // Byggnumret från GitHub Actions blir versionsnummer, så att varje ny APK räknas som en uppdatering.
+        def run = (System.getenv('GITHUB_RUN_NUMBER') ?: '1') as int
+        versionCode run
+        versionName "1.0.${run}"
+    }
+
+    // Fast nyckel i repot: varje ny APK kan installeras ovanpå den gamla utan avinstallation.
+    // OBS: nyckeln är publik om repot är publikt – godtagbart för en privat app, inte för spridning.
+    signingConfigs {
+        spela {
+            storeFile file('spela.keystore')
+            storePassword 'spela123'
+            keyAlias 'spela'
+            keyPassword 'spela123'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
+            signingConfig signingConfigs.spela
+        }
+    }
+
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+// Inga externa bibliotek: bara Androids inbyggda MediaPlayer, HttpURLConnection och org.json.

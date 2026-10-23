@@ -1,0 +1,48 @@
+name: Bygg APK
+
+# Körs vid varje push till main, och kan startas manuellt under fliken Actions.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # behövs för att skapa en Release med APK-filen
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hämta koden
+        uses: actions/checkout@v4
+
+      - name: Installera Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Förbered Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Bygg APK
+        run: bash ./gradlew --no-daemon assembleRelease
+
+      - name: Byt namn på APK
+        run: cp app/build/outputs/apk/release/app-release.apk spela.apk
+
+      - name: Spara som byggartefakt
+        uses: actions/upload-artifact@v4
+        with:
+          name: spela-apk
+          path: spela.apk
+
+      - name: Publicera som Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Spela v1.0.${{ github.run_number }}
+          body: |
+            Ladda ner **spela.apk** nedan på din Android-telefon och öppna filen för att installera.
+          files: spela.apk
+          make_latest: true
