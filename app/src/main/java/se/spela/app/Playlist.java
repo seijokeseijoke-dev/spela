@@ -13,8 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Låtlistan. Varje låt sparas som artist + titel (oberoende av tjänst), plus ett
- * frivilligt YouTube-ID som sparas när låten slagits upp en gång – det sparar sökkvot.
+ * Låtlistan. Varje låt sparas som artist + titel, oberoende av tjänst.
  * Lagras som JSON i appens privata mapp.
  */
 final class Playlist {
@@ -22,21 +21,14 @@ final class Playlist {
     static final class Song {
         String artist;
         String title;
-        String videoId;     // null tills låten slagits upp
-
-        Song(String artist, String title, String videoId) {
+        Song(String artist, String title) {
             this.artist = artist == null ? "" : artist.trim();
             this.title = title == null ? "" : title.trim();
-            this.videoId = videoId;
         }
 
         /** "Artist - Titel" eller bara titeln. */
         String display() {
             return artist.isEmpty() ? title : artist + " - " + title;
-        }
-
-        String searchQuery() {
-            return (artist + " " + title).trim();
         }
 
         /** Tolkar "Artist - Titel" (vanligt format från radio och YouTube). */
@@ -45,10 +37,10 @@ final class Playlist {
             for (String sep : new String[]{" - ", " – ", " — ", " | "}) {
                 int i = t.indexOf(sep);
                 if (i > 0) {
-                    return new Song(t.substring(0, i), t.substring(i + sep.length()), null);
+                    return new Song(t.substring(0, i), t.substring(i + sep.length()));
                 }
             }
-            return new Song("", t, null);
+            return new Song("", t);
         }
     }
 
@@ -74,8 +66,7 @@ final class Playlist {
             JSONArray arr = new JSONArray(new String(b, 0, off, StandardCharsets.UTF_8));
             for (int i = 0; i < arr.length(); i++) {
                 JSONObject o = arr.getJSONObject(i);
-                list.add(new Song(o.optString("artist"), o.optString("title"),
-                        o.has("videoId") ? o.optString("videoId") : null));
+                list.add(new Song(o.optString("artist"), o.optString("title")));
             }
         } catch (Exception ignored) {
             // trasig fil – börja om med tom lista hellre än att krascha
@@ -90,7 +81,6 @@ final class Playlist {
                 JSONObject o = new JSONObject();
                 o.put("artist", s.artist);
                 o.put("title", s.title);
-                if (s.videoId != null) o.put("videoId", s.videoId);
                 arr.put(o);
             }
             File tmp = new File(c.getFilesDir(), "latlista.json.tmp");

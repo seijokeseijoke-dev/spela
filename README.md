@@ -5,20 +5,22 @@ Den hämtar stationer från den öppna katalogen [Radio Browser](https://www.rad
 Ingen API-nyckel, inga externa bibliotek, APK under 200 kB.
 
 ```
-┌──────────────────────────────┐
-│ Välj musiktyp / Spelar: …    │
-├───┬─────────┬───────┬───────┬──────┤
-│ A │ Rock    │80-90  │90-00  │2000->│
-│ B │ Jazz    │ …     │       │      │
-│ C │ Country │       │       │      │
-│ D │ Blues   │       │       │      │
-│ E │ Pop     │       │       │      │
-└───┴─────────┴───────┴───────┴──────┘
-   ♪ Artist - Titel (nu spelas)
-   [+ Spara låt]   [Låtlista]
-   [Start]   [Stop]   [Nästa]
-   [ Högtalare: Telefonen     ]
-          Close app (X)
+┌──────────────────────────────────┐
+│ Välj musiktyp / Spelar: …        │
+└──────────────────────────────────┘
+ ♪ Artist - Titel (nu spelas)
+ [+ Spara låt]        [Låtlista]
+┌─────────┬─────────┬─────────┬────────┐
+│ Rock    │1980-1990│1990-2000│ 2000-> │
+│ Jazz    │ …       │         │        │
+│ Country │         │         │        │
+│ Blues   │         │         │        │
+│ Pop     │         │         │        │
+└─────────┴─────────┴─────────┴────────┘
+ [Start]      [Stop]      [Nästa]
+
+ (✕)                 [Högtalare: …]
+ Close app
 ```
 
 ## Så används appen
@@ -34,7 +36,7 @@ Om du trycker på en annan ruta medan musiken spelar byter appen direkt till den
 
 ## Sonos
 
-1. Tryck **Högtalare**. Appen söker Sonos i hemnätet i cirka 3 sekunder.
+1. Tryck **Högtalare** längst ner till höger. Appen söker Sonos i hemnätet i cirka 3 sekunder.
 2. Välj ett rum, eller **Telefonen** för att spela i telefonen igen. Valet sparas.
 3. Om inget hittas, välj **Ange IP-adress…**. Adressen finns i Sonos-appen under Inställningar → System → Om mitt system.
 
@@ -56,22 +58,12 @@ Krav och förbehåll:
 - De flesta stationer gör det. Appen läser titeln var 30:e sekund, vilket kostar ungefär 1–2 MB i timmen.
 - **+ Spara låt** lägger till låten i låtlistan.
 
-**Låtlista.** Låtarna sparas som "Artist - Titel" i telefonen. Listan är alltså inte låst till någon tjänst.
-- **Sök låt** söker på YouTube. Du väljer en träff och lägger till den eller spelar den direkt.
+**Låtlista.** Låtarna sparas som "Artist - Titel" i telefonen.
 - **Importera** tar emot inklistrad text med en låt per rad.
-- **Dela** skickar listan som text, till exempel som säkerhetskopia via mejl.
-- Håll inne på en låt för att flytta den, ta bort den eller söka rätt version.
-
-**Uppspelning** sker i YouTubes officiella inbäddade spelare.
-- Det kräver en gratis YouTube-nyckel som du lägger in under knappen **Nyckel**. Den räcker till cirka 100 sökningar per dygn.
-- Varje låt slås upp en gång. Resultatet sparas, så att spela listan igen kostar ingen kvot.
-- Nyckeln sparas bara i telefonen och ligger inte i repot.
-
-Begränsningar enligt YouTubes villkor:
-- Spelaren måste synas. Uppspelningen pausas om du lämnar låtlistan eller släcker skärmen, så skärmen hålls tänd medan listan spelar.
-- Låtlistan kan inte spelas på Sonos.
-- Vissa videor tillåter inte inbäddning. De hoppas över.
-- Reklam kan förekomma.
+- **Dela** skickar listan som text, till exempel till mejl eller anteckningar.
+- **Töm** rensar listan.
+- Tryck eller håll inne på en låt för att kopiera, flytta eller ta bort den.
+- Listan spelas inte upp i appen. Den är ett minne över låtar du hört på radion.
 
 ## Bygga och installera
 

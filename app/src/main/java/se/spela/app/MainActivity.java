@@ -33,7 +33,6 @@ import java.util.concurrent.Executors;
  */
 public class MainActivity extends Activity implements PlayerService.Listener {
 
-    private static final String[] LETTERS = {"A", "B", "C", "D", "E"};
     private static final String[] GENRES = {"Rock", "Jazz", "Country", "Blues", "Pop"};
     private static final String[] GENRE_TAGS = {"rock", "jazz", "country", "blues", "pop"};
     private static final String[] DECADES = {"1980-1990", "1990-2000", "2000->"};
@@ -165,7 +164,6 @@ public class MainActivity extends Activity implements PlayerService.Listener {
             table.addView(row, new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT, dp(52)));
 
-            row.addView(cell(LETTERS[r], true), weight(0.5f));
             row.addView(cell(GENRES[r], false), weight(1.4f));
             for (int c = 0; c < DECADES.length; c++) {
                 TextView t = cell(DECADES[c], false);
@@ -191,41 +189,6 @@ public class MainActivity extends Activity implements PlayerService.Listener {
         buttons.addView(pill("Stop", v -> stop()), pillParams());
         buttons.addView(pill("Nästa", v -> next()), pillParams());
 
-        // Högtalarval: telefonen eller en Sonos i hemnätet
-        speakerBtn = pill("Högtalare: Telefonen", v -> chooseSpeaker());
-        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(56));
-        slp.setMargins(dp(6), dp(14), dp(6), 0);
-        root.addView(speakerBtn, slp);
-
-        // Close app
-        TextView closeLabel = new TextView(this);
-        closeLabel.setText("Close app");
-        closeLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
-        closeLabel.setTextColor(Color.BLACK);
-        closeLabel.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        clp.topMargin = dp(32);
-        root.addView(closeLabel, clp);
-
-        TextView close = new TextView(this);
-        close.setText("✕");
-        close.setTextSize(TypedValue.COMPLEX_UNIT_SP, 30);
-        close.setTextColor(Color.BLACK);
-        close.setGravity(Gravity.CENTER);
-        GradientDrawable oval = new GradientDrawable();
-        oval.setShape(GradientDrawable.OVAL);
-        oval.setColor(RED);
-        oval.setStroke(dp(2), Color.BLACK);
-        close.setBackground(oval);
-        close.setContentDescription("Stäng appen");
-        close.setOnClickListener(v -> closeApp());
-        LinearLayout.LayoutParams olp = new LinearLayout.LayoutParams(dp(84), dp(60));
-        olp.gravity = Gravity.CENTER_HORIZONTAL;
-        olp.topMargin = dp(6);
-        root.addView(close, olp);
-
         TextView credit = new TextView(this);
         credit.setText("Stationer: radio-browser.info");
         credit.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
@@ -233,8 +196,61 @@ public class MainActivity extends Activity implements PlayerService.Listener {
         credit.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams crp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        crp.topMargin = dp(24);
+        crp.topMargin = dp(20);
         root.addView(credit, crp);
+
+        // Mellanrum som trycker ner bottenraden till skärmens nederkant
+        root.addView(new View(this), new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        // Bottenrad: Close app längst ner till vänster, högtalarval längst ner till höger
+        LinearLayout bottom = new LinearLayout(this);
+        bottom.setOrientation(LinearLayout.HORIZONTAL);
+        bottom.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        bp.topMargin = dp(16);
+        root.addView(bottom, bp);
+
+        LinearLayout closeBox = new LinearLayout(this);
+        closeBox.setOrientation(LinearLayout.VERTICAL);
+        closeBox.setGravity(Gravity.CENTER_HORIZONTAL);
+        closeBox.setContentDescription("Stäng appen");
+        closeBox.setOnClickListener(v -> closeApp());
+        TextView close = new TextView(this);
+        close.setText("✕");
+        close.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        close.setTextColor(Color.BLACK);
+        close.setGravity(Gravity.CENTER);
+        GradientDrawable oval = new GradientDrawable();
+        oval.setShape(GradientDrawable.OVAL);
+        oval.setColor(RED);
+        oval.setStroke(dp(1), Color.BLACK);
+        close.setBackground(oval);
+        closeBox.addView(close, new LinearLayout.LayoutParams(dp(44), dp(30)));
+        TextView closeLabel = new TextView(this);
+        closeLabel.setText("Close app");
+        closeLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        closeLabel.setTextColor(Color.BLACK);
+        closeBox.addView(closeLabel);
+        bottom.addView(closeBox, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        bottom.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
+
+        // Högtalarval: telefonen eller en Sonos i hemnätet
+        speakerBtn = pill("Högtalare: Telefonen", v -> chooseSpeaker());
+        speakerBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        speakerBtn.setSingleLine(true);
+        speakerBtn.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        speakerBtn.setMaxWidth(getResources().getDisplayMetrics().widthPixels * 6 / 10);
+        speakerBtn.setPadding(dp(14), 0, dp(14), 0);
+        speakerBtn.setMinWidth(0);
+        speakerBtn.setMinimumWidth(0);
+        speakerBtn.setMinHeight(0);
+        speakerBtn.setMinimumHeight(0);
+        bottom.addView(speakerBtn, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, dp(40)));
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
