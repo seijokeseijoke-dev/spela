@@ -30,6 +30,12 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".PlaylistActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:label="Låtlista" />
+
         <service
             android:name=".PlayerService"
             android:exported="false"

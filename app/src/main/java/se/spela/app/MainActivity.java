@@ -55,6 +55,9 @@ public class MainActivity extends Activity implements PlayerService.Listener {
     private int selCol = -1;
     private boolean playing = false;
     private Button speakerBtn;
+    private TextView nowPlayingView;
+    private Button saveSongBtn;
+    private String nowPlaying;
     /** Bakgrundstråd för Sonos-sökning och volym (nätverk får inte köras på UI-tråden). */
     private final ExecutorService bg = Executors.newSingleThreadExecutor();
     private volatile int sonosVolume = -1;   // senast kända volym, -1 = okänd
@@ -86,6 +89,21 @@ public class MainActivity extends Activity implements PlayerService.Listener {
     }
 
     @Override
+    public void onNowPlaying(String title) {
+        nowPlaying = title;
+        if (nowPlayingView == null) return;
+        if (title == null) {
+            nowPlayingView.setText(PlayerService.isPlaying() ? "♪ Stationen visar inte låttitel" : "");
+            saveSongBtn.setEnabled(false);
+            saveSongBtn.setAlpha(0.4f);
+        } else {
+            nowPlayingView.setText("♪ " + title);
+            saveSongBtn.setEnabled(true);
+            saveSongBtn.setAlpha(1f);
+        }
+    }
+
+    @Override
     public void onStatus(String text, boolean isPlaying) {
         playing = isPlaying;
         status.setText(text);
@@ -112,6 +130,26 @@ public class MainActivity extends Activity implements PlayerService.Listener {
         status.setBackground(box);
         root.addView(status, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        // Nu spelas + Spara låt / Låtlista
+        nowPlayingView = new TextView(this);
+        nowPlayingView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        nowPlayingView.setTextColor(GREEN);
+        nowPlayingView.setTypeface(Typeface.DEFAULT_BOLD);
+        nowPlayingView.setPadding(dp(4), dp(8), dp(4), dp(4));
+        root.addView(nowPlayingView, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout songRow = new LinearLayout(this);
+        songRow.setOrientation(LinearLayout.HORIZONTAL);
+        root.addView(songRow, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        saveSongBtn = pill("+ Spara låt", v -> saveSong());
+        saveSongBtn.setEnabled(false);
+        saveSongBtn.setAlpha(0.4f);
+        songRow.addView(saveSongBtn, pillParams());
+        songRow.addView(pill("Låtlista", v ->
+                startActivity(new Intent(this, PlaylistActivity.class))), pillParams());
 
         // Tabell
         LinearLayout table = new LinearLayout(this);
@@ -304,6 +342,14 @@ public class MainActivity extends Activity implements PlayerService.Listener {
 
     private void stop() {
         startService(new Intent(this, PlayerService.class).setAction(PlayerService.ACTION_STOP));
+    }
+
+    // ---------------- Låtlista ----------------
+
+    private void saveSong() {
+        if (nowPlaying == null) return;
+        boolean added = Playlist.add(this, Playlist.Song.parse(nowPlaying));
+        toast(added ? "Sparad i låtlistan: " + nowPlaying : "Finns redan i låtlistan");
     }
 
     // ---------------- Högtalare ----------------

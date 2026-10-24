@@ -23,6 +23,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Spelar radioströmmen i en förgrundstjänst, så att musiken fortsätter
@@ -50,11 +53,16 @@ public class PlayerService extends Service {
     // ---- Enkel statuskanal till MainActivity (samma process) ----
     interface Listener {
         void onStatus(String text, boolean playing);
+
+        /** Artist – titel som stationen sänder just nu, eller null. */
+        default void onNowPlaying(String title) {
+        }
     }
 
     private static Listener listener;
     private static String lastStatus = "Välj musiktyp";
     private static boolean lastPlaying = false;
+    private static String lastNowPlaying = null;
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
 
     private static boolean running = false;
@@ -70,7 +78,22 @@ public class PlayerService extends Service {
 
     static void setListener(Listener l) {
         listener = l;
-        if (l != null) l.onStatus(lastStatus, lastPlaying);
+        if (l != null) {
+            l.onStatus(lastStatus, lastPlaying);
+            l.onNowPlaying(lastNowPlaying);
+        }
+    }
+
+    static String nowPlaying() {
+        return lastNowPlaying;
+    }
+
+    private static void publishNowPlaying(String title) {
+        MAIN.post(() -> {
+            if (title == null ? lastNowPlaying == null : title.equals(lastNowPlaying)) return;
+            lastNowPlaying = title;
+            if (listener != null) listener.onNowPlaying(title);
+        });
     }
 
     private static void publish(String text, boolean playing) {
@@ -87,7 +110,7 @@ public class PlayerService extends Service {
     private int index = -1;
     private int failedInRow = 0;
     private String label = "";
-    private int generation = 0;          // ökar vid varje nytt val, så att gamla trådar ignoreras
+    private volatile int generation = 0;          // ökar vid varje nytt val, så att gamla trådar ignoreras
     private WifiManager.WifiLock wifiLock;
     private AudioManager audioManager;
     private AudioFocusRequest focusRequest;
@@ -95,6 +118,10 @@ public class PlayerService extends Service {
     private final ExecutorService sonosExec = Executors.newSingleThreadExecutor();
     /** Högtalare som just nu spelar (eller håller på att starta) – null = telefonen. */
     private Sonos.Device sonosInUse;
+    /** Läser "nu spelas" ur strömmen med jämna mellanrum. */
+    private final ScheduledExecutorService metaExec = Executors.newSingleThreadScheduledExecutor();
+    private ScheduledFuture<?> metaTask;
+    private static final long META_INTERVAL_S = 30;
     private final Runnable prepareTimeout = () -> {
         publish("Stationen svarar inte – provar nästa…", false);
         playNext(true);
@@ -198,6 +225,7 @@ public class PlayerService extends Service {
     }
 
     private void playStation(RadioBrowser.Station s) {
+        stopMeta();
         releasePlayer();
         Sonos.Device target = Sonos.saved(this);
         if (target != null) {
@@ -230,6 +258,7 @@ public class PlayerService extends Service {
             failedInRow = 0;
             publish("Spelar: " + s.name + "\n" + info, true);
             updateNotification("Spelar: " + s.name);
+            startMeta(s, gen);
             new Thread(() -> RadioBrowser.reportClick(s.uuid), "spela-click").start();
         });
         mp.setOnErrorListener((p, what, extra) -> {
@@ -291,6 +320,7 @@ public class PlayerService extends Service {
                             failedInRow = 0;
                             publish("Spelar på " + dev.name + ": " + s.name + "\n" + info, true);
                             updateNotification(dev.name + ": " + s.name);
+                            startMeta(s, gen);
                         });
                         RadioBrowser.reportClick(s.uuid);
                         return;
@@ -319,6 +349,30 @@ public class PlayerService extends Service {
                 playNext(true);
             });
         });
+    }
+
+    private void startMeta(RadioBrowser.Station s, int gen) {
+        stopMeta();
+        final String stationName = s.name;
+        metaTask = metaExec.scheduleWithFixedDelay(() -> {
+            if (gen != generation) return;
+            String t = IcyMeta.fetchTitle(s.url);
+            if (gen != generation) return;
+            publishNowPlaying(t);
+            MAIN.post(() -> {
+                if (gen != generation || !lastPlaying) return;
+                String prefix = sonosInUse != null ? sonosInUse.name + ": " : "";
+                updateNotification(t != null ? prefix + t + "  (" + stationName + ")" : prefix + stationName);
+            });
+        }, 1, META_INTERVAL_S, TimeUnit.SECONDS);
+    }
+
+    private void stopMeta() {
+        if (metaTask != null) {
+            metaTask.cancel(false);
+            metaTask = null;
+        }
+        publishNowPlaying(null);
     }
 
     /** Stoppar högtalaren om den används. Körs efter ev. pågående startförsök. */
@@ -437,6 +491,7 @@ public class PlayerService extends Service {
     /** Stoppar allt och visar ett slutmeddelande (t.ex. ett felmeddelande). */
     private void stopEverything(String message) {
         generation++;
+        stopMeta();
         releasePlayer();
         stopSonos();
         abandonFocus();
@@ -457,6 +512,8 @@ public class PlayerService extends Service {
         releasePlayer();
         stopSonos();
         sonosExec.shutdown();    // låter ett köat Stopp hinna skickas
+        stopMeta();
+        metaExec.shutdownNow();
         abandonFocus();
         if (wifiLock != null && wifiLock.isHeld()) wifiLock.release();
         super.onDestroy();

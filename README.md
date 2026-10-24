@@ -14,6 +14,8 @@ Ingen API-nyckel, inga externa bibliotek, APK under 200 kB.
 │ D │ Blues   │       │       │      │
 │ E │ Pop     │       │       │      │
 └───┴─────────┴───────┴───────┴──────┘
+   ♪ Artist - Titel (nu spelas)
+   [+ Spara låt]   [Låtlista]
    [Start]   [Stop]   [Nästa]
    [ Högtalare: Telefonen     ]
           Close app (X)
@@ -47,6 +49,29 @@ Krav och förbehåll:
 - Telefonen och Sonos måste vara på samma wifi-nät, inte ett gästnät.
 - Styrningen använder Sonos lokala UPnP-gränssnitt på port 1400. Det är inte officiellt dokumenterat och kan påverkas av framtida firmware.
 - Alla strömmar fungerar inte på Sonos. Appen prövar då automatiskt nästa station.
+
+## Nu spelas och låtlista
+
+**Nu spelas.** Under statusrutan visas artist och titel, om stationen sänder det.
+- De flesta stationer gör det. Appen läser titeln var 30:e sekund, vilket kostar ungefär 1–2 MB i timmen.
+- **+ Spara låt** lägger till låten i låtlistan.
+
+**Låtlista.** Låtarna sparas som "Artist - Titel" i telefonen. Listan är alltså inte låst till någon tjänst.
+- **Sök låt** söker på YouTube. Du väljer en träff och lägger till den eller spelar den direkt.
+- **Importera** tar emot inklistrad text med en låt per rad.
+- **Dela** skickar listan som text, till exempel som säkerhetskopia via mejl.
+- Håll inne på en låt för att flytta den, ta bort den eller söka rätt version.
+
+**Uppspelning** sker i YouTubes officiella inbäddade spelare.
+- Det kräver en gratis YouTube-nyckel som du lägger in under knappen **Nyckel**. Den räcker till cirka 100 sökningar per dygn.
+- Varje låt slås upp en gång. Resultatet sparas, så att spela listan igen kostar ingen kvot.
+- Nyckeln sparas bara i telefonen och ligger inte i repot.
+
+Begränsningar enligt YouTubes villkor:
+- Spelaren måste synas. Uppspelningen pausas om du lämnar låtlistan eller släcker skärmen, så skärmen hålls tänd medan listan spelar.
+- Låtlistan kan inte spelas på Sonos.
+- Vissa videor tillåter inte inbäddning. De hoppas över.
+- Reklam kan förekomma.
 
 ## Bygga och installera
 
