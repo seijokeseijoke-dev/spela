@@ -2,6 +2,7 @@ package se.spela.app;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -9,13 +10,21 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
+import android.text.InputType;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.View;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
+
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Enkel meny enligt skissen:
@@ -45,6 +54,10 @@ public class MainActivity extends Activity implements PlayerService.Listener {
     private int selRow = -1;
     private int selCol = -1;
     private boolean playing = false;
+    private Button speakerBtn;
+    /** Bakgrundstråd för Sonos-sökning och volym (nätverk får inte köras på UI-tråden). */
+    private final ExecutorService bg = Executors.newSingleThreadExecutor();
+    private volatile int sonosVolume = -1;   // senast kända volym, -1 = okänd
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -61,6 +74,8 @@ public class MainActivity extends Activity implements PlayerService.Listener {
     @Override
     protected void onResume() {
         super.onResume();
+        sonosVolume = -1;
+        updateSpeakerButton();
         PlayerService.setListener(this);
     }
 
@@ -137,6 +152,13 @@ public class MainActivity extends Activity implements PlayerService.Listener {
         buttons.addView(pill("Start", v -> start()), pillParams());
         buttons.addView(pill("Stop", v -> stop()), pillParams());
         buttons.addView(pill("Nästa", v -> next()), pillParams());
+
+        // Högtalarval: telefonen eller en Sonos i hemnätet
+        speakerBtn = pill("Högtalare: Telefonen", v -> chooseSpeaker());
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(56));
+        slp.setMargins(dp(6), dp(14), dp(6), 0);
+        root.addView(speakerBtn, slp);
 
         // Close app
         TextView closeLabel = new TextView(this);
@@ -282,6 +304,147 @@ public class MainActivity extends Activity implements PlayerService.Listener {
 
     private void stop() {
         startService(new Intent(this, PlayerService.class).setAction(PlayerService.ACTION_STOP));
+    }
+
+    // ---------------- Högtalare ----------------
+
+    private void updateSpeakerButton() {
+        if (speakerBtn == null) return;
+        Sonos.Device d = Sonos.saved(this);
+        speakerBtn.setText("Högtalare: " + (d != null ? d.name : "Telefonen"));
+    }
+
+    private void chooseSpeaker() {
+        final AlertDialog searching = new AlertDialog.Builder(this)
+                .setTitle("Högtalare")
+                .setMessage("Söker Sonos i hemnätet…")
+                .setCancelable(true)
+                .show();
+        bg.execute(() -> {
+            List<Sonos.Device> found;
+            String error = null;
+            try {
+                found = Sonos.discover(this);
+            } catch (Exception e) {
+                found = new java.util.ArrayList<>();
+                error = "Sökningen misslyckades. Är telefonen ansluten till wifi?";
+            }
+            final List<Sonos.Device> list = found;
+            final String err = error;
+            runOnUiThread(() -> {
+                if (isFinishing() || !searching.isShowing()) return;   // avbruten
+                searching.dismiss();
+                showSpeakerList(list, err);
+            });
+        });
+    }
+
+    private void showSpeakerList(List<Sonos.Device> list, String error) {
+        Sonos.Device current = Sonos.saved(this);
+        String[] items = new String[list.size() + 2];
+        int checked = 0;
+        items[0] = "Telefonen";
+        for (int i = 0; i < list.size(); i++) {
+            items[i + 1] = list.get(i).name;
+            if (current != null && current.uuid.equals(list.get(i).uuid)) checked = i + 1;
+        }
+        items[items.length - 1] = "Ange IP-adress…";
+        String title = list.isEmpty()
+                ? (error != null ? error : "Ingen Sonos hittades")
+                : "Välj högtalare";
+        new AlertDialog.Builder(this)
+                .setTitle(title)
+                .setSingleChoiceItems(items, checked, (dlg, which) -> {
+                    dlg.dismiss();
+                    if (which == 0) {
+                        applySpeaker(null);
+                    } else if (which == items.length - 1) {
+                        askForIp();
+                    } else {
+                        applySpeaker(list.get(which - 1));
+                    }
+                })
+                .setNegativeButton("Avbryt", null)
+                .show();
+    }
+
+    private void askForIp() {
+        final EditText input = new EditText(this);
+        input.setInputType(InputType.TYPE_CLASS_PHONE);   // siffror och punkter
+        input.setHint("t.ex. 192.168.1.23");
+        Sonos.Device cur = Sonos.saved(this);
+        if (cur != null) input.setText(cur.ip);
+        new AlertDialog.Builder(this)
+                .setTitle("Sonos IP-adress")
+                .setMessage("Finns i Sonos-appen: Inställningar → System → Om mitt system.")
+                .setView(input)
+                .setPositiveButton("OK", (d, w) -> {
+                    String ip = input.getText().toString().trim();
+                    if (ip.isEmpty()) return;
+                    bg.execute(() -> {
+                        try {
+                            Sonos.Device dev = Sonos.describe(ip);
+                            runOnUiThread(() -> applySpeaker(dev));
+                        } catch (Exception e) {
+                            runOnUiThread(() -> toast("Ingen Sonos svarade på " + ip));
+                        }
+                    });
+                })
+                .setNegativeButton("Avbryt", null)
+                .show();
+    }
+
+    private void applySpeaker(Sonos.Device d) {
+        Sonos.Device old = Sonos.saved(this);
+        boolean same = (old == null && d == null)
+                || (old != null && d != null && old.uuid.equals(d.uuid));
+        Sonos.save(this, d);
+        sonosVolume = -1;
+        updateSpeakerButton();
+        if (!same && PlayerService.isRunning()) {
+            startService(new Intent(this, PlayerService.class).setAction(PlayerService.ACTION_SWITCH));
+        }
+    }
+
+    /** Volymknapparna styr Sonos-volymen när musiken spelar där. */
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        int key = event.getKeyCode();
+        if (key == KeyEvent.KEYCODE_VOLUME_UP || key == KeyEvent.KEYCODE_VOLUME_DOWN) {
+            final Sonos.Device d = Sonos.saved(this);
+            if (d != null && PlayerService.isRunning()) {
+                if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                    final int step = key == KeyEvent.KEYCODE_VOLUME_UP ? 2 : -2;
+                    bg.execute(() -> {
+                        try {
+                            if (sonosVolume < 0) sonosVolume = Sonos.getVolume(d);
+                            sonosVolume = Math.max(0, Math.min(100, sonosVolume + step));
+                            Sonos.setVolume(d, sonosVolume);
+                            final int v = sonosVolume;
+                            runOnUiThread(() -> toast(d.name + " volym: " + v));
+                        } catch (Exception e) {
+                            sonosVolume = -1;
+                        }
+                    });
+                }
+                return true;   // låt inte telefonen ändra sin egen volym
+            }
+        }
+        return super.dispatchKeyEvent(event);
+    }
+
+    private Toast lastToast;
+
+    private void toast(String text) {
+        if (lastToast != null) lastToast.cancel();
+        lastToast = Toast.makeText(this, text, Toast.LENGTH_SHORT);
+        lastToast.show();
+    }
+
+    @Override
+    protected void onDestroy() {
+        bg.shutdown();
+        super.onDestroy();
     }
 
     private void closeApp() {

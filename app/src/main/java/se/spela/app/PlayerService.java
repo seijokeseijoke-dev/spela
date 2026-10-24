@@ -21,22 +21,28 @@ import android.os.PowerManager;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Spelar radioströmmen i en förgrundstjänst, så att musiken fortsätter
  * när skärmen släcks eller appen ligger i bakgrunden.
+ * Om en Sonos-högtalare är vald skickas strömmen dit i stället; telefonen blir då fjärrkontroll.
  */
 public class PlayerService extends Service {
 
     static final String ACTION_PLAY = "se.spela.app.PLAY";
     static final String ACTION_NEXT = "se.spela.app.NEXT";
     static final String ACTION_STOP = "se.spela.app.STOP";
+    /** Spela om aktuell station på nyss vald högtalare. */
+    static final String ACTION_SWITCH = "se.spela.app.SWITCH";
     static final String EXTRA_GENRE = "genre";
     static final String EXTRA_DECADES = "decades";
     static final String EXTRA_LABEL = "label";
 
     /** Tid att vänta på att en ström startar innan nästa station prövas. */
     private static final long PREPARE_TIMEOUT_MS = 15000;
+    private static final long SONOS_START_TIMEOUT_MS = 10000;
     private static final int MAX_FAILED_IN_ROW = 6;
     private static final String CHANNEL_ID = "spela_playback";
     private static final int NOTIF_ID = 1;
@@ -50,6 +56,17 @@ public class PlayerService extends Service {
     private static String lastStatus = "Välj musiktyp";
     private static boolean lastPlaying = false;
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
+
+    private static boolean running = false;
+
+    static boolean isPlaying() {
+        return lastPlaying;
+    }
+
+    /** Sant när tjänsten är igång (spelar, ansluter eller söker). */
+    static boolean isRunning() {
+        return running;
+    }
 
     static void setListener(Listener l) {
         listener = l;
@@ -74,6 +91,10 @@ public class PlayerService extends Service {
     private WifiManager.WifiLock wifiLock;
     private AudioManager audioManager;
     private AudioFocusRequest focusRequest;
+    /** Sonos-anrop körs i tur och ordning på en egen tråd, så att Stopp alltid kommer efter Spela. */
+    private final ExecutorService sonosExec = Executors.newSingleThreadExecutor();
+    /** Högtalare som just nu spelar (eller håller på att starta) – null = telefonen. */
+    private Sonos.Device sonosInUse;
     private final Runnable prepareTimeout = () -> {
         publish("Stationen svarar inte – provar nästa…", false);
         playNext(true);
@@ -82,6 +103,7 @@ public class PlayerService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        running = true;
         audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
         if (wm != null) {
@@ -102,6 +124,19 @@ public class PlayerService extends Service {
             startSearch(intent.getStringExtra(EXTRA_GENRE),
                     intent.getStringArrayExtra(EXTRA_DECADES),
                     intent.getStringExtra(EXTRA_LABEL));
+        } else if (ACTION_SWITCH.equals(action)) {
+            if (stations.isEmpty() || index < 0) {
+                stopSelfIfIdle();
+            } else {
+                goForeground("Byter högtalare…");
+                generation++;
+                releasePlayer();
+                abandonFocus();
+                stopSonos();
+                index--;                 // spela samma station igen
+                failedInRow = 0;
+                playNext(false);
+            }
         } else if (ACTION_NEXT.equals(action)) {
             if (stations.isEmpty()) {
                 stopEverything("Välj musiktyp och tryck Start");
@@ -164,6 +199,14 @@ public class PlayerService extends Service {
 
     private void playStation(RadioBrowser.Station s) {
         releasePlayer();
+        Sonos.Device target = Sonos.saved(this);
+        if (target != null) {
+            abandonFocus();
+            if (wifiLock != null && wifiLock.isHeld()) wifiLock.release();
+            playOnSonos(s, target);
+            return;
+        }
+        stopSonos();             // om vi nyss spelade på Sonos
         final int gen = generation;
         final String info = label + "  (" + (index + 1) + "/" + stations.size() + ")";
         publish("Ansluter: " + s.name + "\n" + info, false);
@@ -209,6 +252,84 @@ public class PlayerService extends Service {
             publish("Ogiltig ström – provar nästa…", false);
             MAIN.post(() -> playNext(true));
         }
+    }
+
+    // ---- Sonos ----
+    private void playOnSonos(RadioBrowser.Station s, Sonos.Device target) {
+        final int gen = generation;
+        final String info = label + "  (" + (index + 1) + "/" + stations.size() + ")";
+        sonosInUse = target;
+        publish("Ansluter " + target.name + ": " + s.name + "\n" + info, false);
+        updateNotification(target.name + " – ansluter: " + s.name);
+
+        sonosExec.execute(() -> {
+            if (gen != generation) return;
+            Sonos.Device dev = Sonos.resolve(this, target);
+            if (dev == null) {
+                MAIN.post(() -> {
+                    if (gen != generation) return;
+                    sonosInUse = null;
+                    stopEverything("Hittar inte högtalaren " + target.name
+                            + ". Kontrollera att telefonen är på samma wifi, eller välj högtalare igen.");
+                });
+                return;
+            }
+            if (dev != target) MAIN.post(() -> {
+                if (sonosInUse == target) sonosInUse = dev;
+            });
+            for (String uri : Sonos.candidateUris(s.url, s.codec)) {
+                if (gen != generation) return;
+                try {
+                    Sonos.play(dev, uri, s.name);
+                    if (Sonos.waitUntilPlaying(dev, SONOS_START_TIMEOUT_MS)) {
+                        if (gen != generation) {
+                            Sonos.stop(dev);   // användaren hann trycka Stopp
+                            return;
+                        }
+                        MAIN.post(() -> {
+                            if (gen != generation) return;
+                            failedInRow = 0;
+                            publish("Spelar på " + dev.name + ": " + s.name + "\n" + info, true);
+                            updateNotification(dev.name + ": " + s.name);
+                        });
+                        RadioBrowser.reportClick(s.uuid);
+                        return;
+                    }
+                } catch (Sonos.SonosError e) {
+                    if (e.code == 800) {
+                        MAIN.post(() -> {
+                            if (gen != generation) return;
+                            stopEverything(dev.name + " är grupperad med en annan högtalare."
+                                    + " Välj gruppens huvudhögtalare under Högtalare.");
+                        });
+                        return;
+                    }
+                    // annat fel (t.ex. 714 = formatet stöds inte): prova nästa variant
+                } catch (Exception e) {
+                    MAIN.post(() -> {
+                        if (gen != generation) return;
+                        stopEverything("Tappade kontakten med " + dev.name + ".");
+                    });
+                    return;
+                }
+            }
+            MAIN.post(() -> {
+                if (gen != generation) return;
+                publish(dev.name + " kunde inte spela " + s.name + " – provar nästa…", false);
+                playNext(true);
+            });
+        });
+    }
+
+    /** Stoppar högtalaren om den används. Körs efter ev. pågående startförsök. */
+    private void stopSonos() {
+        final Sonos.Device d = sonosInUse;
+        sonosInUse = null;
+        if (d != null) sonosExec.execute(() -> Sonos.stop(d));
+    }
+
+    private void stopSelfIfIdle() {
+        if (!lastPlaying) stopSelf();
     }
 
     // ---- Ljudfokus: pausa vid telefonsamtal o.d. ----
@@ -317,6 +438,7 @@ public class PlayerService extends Service {
     private void stopEverything(String message) {
         generation++;
         releasePlayer();
+        stopSonos();
         abandonFocus();
         if (wifiLock != null && wifiLock.isHeld()) wifiLock.release();
         publish(message, false);
@@ -330,8 +452,11 @@ public class PlayerService extends Service {
 
     @Override
     public void onDestroy() {
+        running = false;
         generation++;
         releasePlayer();
+        stopSonos();
+        sonosExec.shutdown();    // låter ett köat Stopp hinna skickas
         abandonFocus();
         if (wifiLock != null && wifiLock.isHeld()) wifiLock.release();
         super.onDestroy();

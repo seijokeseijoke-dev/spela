@@ -15,6 +15,7 @@ Ingen API-nyckel, inga externa bibliotek, APK under 200 kB.
 │ E │ Pop     │       │       │      │
 └───┴─────────┴───────┴───────┴──────┘
    [Start]   [Stop]   [Nästa]
+   [ Högtalare: Telefonen     ]
           Close app (X)
 ```
 
@@ -28,6 +29,24 @@ Ingen API-nyckel, inga externa bibliotek, APK under 200 kB.
 
 Musiken fortsätter när skärmen släcks. En notis visar vad som spelas och har knapparna Nästa och Stopp.
 Om du trycker på en annan ruta medan musiken spelar byter appen direkt till den nya musiktypen.
+
+## Sonos
+
+1. Tryck **Högtalare**. Appen söker Sonos i hemnätet i cirka 3 sekunder.
+2. Välj ett rum, eller **Telefonen** för att spela i telefonen igen. Valet sparas.
+3. Om inget hittas, välj **Ange IP-adress…**. Adressen finns i Sonos-appen under Inställningar → System → Om mitt system.
+
+När en Sonos är vald:
+- Start, Stop och Nästa styr högtalaren.
+- Telefonens volymknappar styr Sonos-volymen medan appen är öppen.
+- Högtalaren hämtar strömmen själv, så telefonen är bara fjärrkontroll.
+- Byter du högtalare under uppspelning flyttas samma station dit.
+- **Close app** stoppar även Sonos.
+
+Krav och förbehåll:
+- Telefonen och Sonos måste vara på samma wifi-nät, inte ett gästnät.
+- Styrningen använder Sonos lokala UPnP-gränssnitt på port 1400. Det är inte officiellt dokumenterat och kan påverkas av framtida firmware.
+- Alla strömmar fungerar inte på Sonos. Appen prövar då automatiskt nästa station.
 
 ## Bygga och installera
 
